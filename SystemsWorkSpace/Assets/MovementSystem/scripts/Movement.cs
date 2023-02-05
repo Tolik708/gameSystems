@@ -11,25 +11,43 @@ public class Movement : MonoBehaviour
 	
 	[Header("Camera Settings")]
 	[SerializeField] private Transform cameraPosition;
-	[SerializeField] private Vector2 sensativity = new Vector2(300, 300);
-	[SerializeField] private Vector2 maxLookAngle = new Vector2(-90, 90);
+	[SerializeField] private Vector2   sensativity =  new Vector2(300, 300);
+	[SerializeField] private Vector2   maxLookAngle = new Vector2(-90, 90);
 	
 	[Header("Ground Check")]
 	[SerializeField] private LayerMask groundLayer;
-	[SerializeField] private float groundDrag = 5;
-	[SerializeField] private bool useCayotyTime = false;
-	[SerializeField] private float cayotyTime = 0.4f;
+	[SerializeField] private float     groundDrag =    5;
+	[SerializeField] private bool      useCayotyTime = false;
+	[SerializeField] private float     cayotyTime =    0.4f;
 	
 	[Header("Speeds")]
-	[SerializeField] private float walkSpeed = 5;
-	[SerializeField] private bool changeSpeedInAir = false;
-	[SerializeField] private bool smoothSpeed = false;
-	[SerializeField] private Vector2 smoothSpeedSpeed = new Vector2(10, 10); // lowering / upering
-	[SerializeField] private bool drasticSmoothSpeed = false;
-	[SerializeField] private Vector2 drastic = new Vector2(10, 10); // lowering / upering
+	[SerializeField] private float   walkSpeed =           5;
+	[SerializeField] private bool    lowerSpeedInAir =     false;
+	[SerializeField] private bool    upperSpeedInAir =     true;
+	[SerializeField] private bool    noInputNoSpeedInAir = true;
+	[SerializeField] private bool    smoothSpeed =         false;
+	[SerializeField] private Vector2 smoothSpeedSpeed =    new Vector2(10, 10); // lowering / upering
+	[SerializeField] private bool    drasticSmoothSpeed =  false;
+	[SerializeField] private Vector2 drastic =             new Vector2(10, 10); // lowering / upering
 	
 	[Header("Jump")]
-	[SerializeField] private bool jump;
+	[SerializeField] private bool  jump;
+	[SerializeField] private bool  holdJumpButton;
+	[SerializeField] private float jumpHeight;
+	[SerializeField] private float jumpRememberTime;
+	[SerializeField] private float jumpDelay;
+	//jump cut
+	[SerializeField] private bool  jumpCut;
+	[SerializeField] private float jumpCutStrength;
+	//dubble jump
+	[SerializeField] private bool  dubbleJump;
+	[SerializeField] private int   ammountOfJumpsInAir;
+	[SerializeField] private float dubbleJumpHeight;
+	[SerializeField] private float dubbleJumpDelay;
+	//jump speed manipulations
+	[SerializeField] private bool  jumpSpeedManipulations;
+	[SerializeField] private float increaseSpeedAfterJumpBy;
+	[SerializeField] private float maxObtainableSpeedByJump;
 	
 	[Header("Input")]
 	[SerializeField] private KeyCode jumpKey;
@@ -40,16 +58,16 @@ public class Movement : MonoBehaviour
 	[SerializeField] private KeyCode wallRunDownKey;
 	
 	[Header("Debug Variables")] //sets automaticaly
-	[SerializeField] private bool debug = false;
+	[SerializeField] private bool      debug = false;
 	[SerializeField] private Rigidbody rb;
 	[SerializeField] private Transform orientation;
 	[SerializeField] private Transform cam;
 	[SerializeField] private Transform cameraHolder;
-	[SerializeField] private Vector3 groundCheckSize;
-	[SerializeField] private float groundCheckLength;
+	[SerializeField] private Vector3   groundCheckSize;
+	[SerializeField] private float     groundCheckLength;
 	
 	[Header("Debug Text")]
-	[SerializeField] private bool debugText = false;
+	[SerializeField] private bool       debugText = false;
 	[SerializeField] private GameObject debugTextPrefab;
 	
 	[Header("Gizmos")]
@@ -66,19 +84,24 @@ public class Movement : MonoBehaviour
 	private float cameraRotationY;
 	private float cameraRotationZ;
 	//groundcheck
-	private bool realGrounded;
-	private bool grounded;
+	private bool  realGrounded;
+	private bool  grounded;
 	private float cayotyTimer;
 	//speed
 	private float realSpeed;
 	private float desiredSpeed;
+	//jump
+	private int   jumpAmm;
+	private float jumpRememberTimer;
+	private float jumpDelayTimer;
+	private float jumpedTimer;
 	//debug text
 	private TextMeshProUGUI realSpeedText;
 	private TextMeshProUGUI desiredSpeedText;
 	private TextMeshProUGUI rigidbodySpeedText;
 	private TextMeshProUGUI stateText;
 	//bools to control state
-	bool noInput;
+	private bool noInput;
 	
 	private void Start()
 	{
@@ -118,10 +141,14 @@ public class Movement : MonoBehaviour
 		
 		//set automaticaly distance for ground check by picking half of the mesh size and adding 0.1f (works perfectly if orientation os in the middle of mesh)
 		if (groundCheckLength == 0)
-			groundCheckLength = (rend.bounds.size.y/2) + 0.1f;
+			groundCheckLength = (rend.bounds.size.y/2) + 0.01f;
 		//set automaticaly size for ground check by picking half of the mesh size
 		if (groundCheckSize == Vector3.zero)
-			groundCheckSize = new Vector3(rend.bounds.size.x/2, 0.01f, rend.bounds.size.y/2);
+			groundCheckSize = new Vector3((rend.bounds.size.x/2) - 0.2f, 0.01f, (rend.bounds.size.y/2) - 0.2f);
+		
+		//jump delay can't be zero
+		if (jumpDelay <= 0)
+			jumpDelay = 0.1f;
 		
 		//debugText
 		if (debugText == true)
@@ -138,8 +165,8 @@ public class Movement : MonoBehaviour
 	{
 		otherUpdate();
 		CameraUpdate();
-		MyInput();
 		GroundCheck();
+		MyInput();
 		StateHandler();
 		SpeedLimitation();
 		SmoothSpeed();
@@ -157,6 +184,18 @@ public class Movement : MonoBehaviour
 			rb.drag = groundDrag;
 		else
 			rb.drag = 0;
+		
+		if (jumpRememberTimer > 0)
+			jumpRememberTimer -= Time.deltaTime;
+		if (jumpDelayTimer > 0)
+			jumpDelayTimer -= Time.deltaTime;
+		//to track first frames after jump
+		if (jumpedTimer > 0)
+		{
+			//also set drag to zero if ground check do not be on time
+			rb.drag = 0;
+			jumpedTimer -= Time.deltaTime;;
+		}
 	}
 	
 	private void StateHandler()
@@ -169,18 +208,27 @@ public class Movement : MonoBehaviour
 		else if (noInput && realGrounded)
 		{
 			moveType = movementTypes.stand;
-			desiredSpeed = 0;
+			desiredSpeed = walkSpeed;
 		}
 		else
 		{
 			moveType = movementTypes.air;
 		}
-		
 	}
 	
 	private void MyInput()
 	{
 		noInput = (Input.GetAxisRaw("Vertical") == 0 && Input.GetAxisRaw("Horizontal") == 0);
+		
+		//jump
+		if ((holdJumpButton && Input.GetKey(jumpKey)) || (!holdJumpButton && Input.GetKeyDown(jumpKey)))
+			Jump(false);
+		
+		if (jumpRememberTimer > 0)
+			Jump(true);
+		
+		if (jumpCut && Input.GetKeyUp(jumpKey) && rb.velocity.y > 0)
+			rb.AddForce(Vector3.down * rb.velocity.y * jumpCutStrength, ForceMode.Impulse);
 	}
 	
 	private void Move()
@@ -193,7 +241,59 @@ public class Movement : MonoBehaviour
 		rb.AddForce(moveDirection.normalized * realSpeed * 10, ForceMode.Force);
 	}
 	
-	#region speed
+	#region Jump
+	//return true if jump was sucesfull
+	bool Jump(bool byRemember)
+	{
+		//basic jump
+		if (grounded && jumpDelayTimer <= 0)
+		{
+			jumpAmm = ammountOfJumpsInAir;
+			
+			//set delay to next jumo
+			jumpDelayTimer = jumpDelay;
+			//for setting drag to 0 (because groundcheck do not affected by jump)
+			jumpedTimer = 0.1f;
+			//jumpedTimer works only after that frame so we need to set drag to 0 in that frame too
+			rb.drag = 0;
+			
+			//reset y velocity if it lower 0 for jump be independend of y velocity (because can be grounded earlier than velocity.y is 0)
+			if (rb.velocity.y < 0)
+				rb.velocity = new Vector3(rb.velocity.x, 0, rb.velocity.z);
+			//adding 0.2 for sure that we get to needed height (can be changed)
+			//calculating impulse independent of mass to get to needed height
+			rb.AddForce(Vector3.up * (Mathf.Sqrt((-2 * -9.81f) * jumpHeight) + 0.2f), ForceMode.VelocityChange);
+			
+			return true;
+		}
+		//dubble jump (can be triggered only by keyDown and can't be trigered by remember[Input.GetKeyDown(jumpKey) imply that])
+		else if (jumpAmm > 0 && jumpDelayTimer <= 0 && Input.GetKeyDown(jumpKey))
+		{
+			jumpAmm--;
+			
+			//set delay to next jumo
+			jumpDelayTimer = dubbleJumpDelay;
+			//for setting drag to 0 (because groundcheck do not affected by jump)
+			jumpedTimer = 0.1f;
+			//jumpedTimer works only after that frame so we need to set drag to 0 in that frame too
+			rb.drag = 0;
+			
+			//reset y velocity if it lower 0 for jump be independend of y velocity (because can be grounded earlier than velocity.y is 0)
+			if (rb.velocity.y < 0)
+				rb.velocity = new Vector3(rb.velocity.x, 0, rb.velocity.z);
+			//calculating impulse independent of mass to get to needed height
+			rb.AddForce(Vector3.up * Mathf.Sqrt((-2 * -9.81f) * dubbleJumpHeight), ForceMode.VelocityChange);
+		}
+		
+		//if caused by remember do not add remember time
+		else if (!byRemember)
+			jumpRememberTimer = jumpRememberTime;
+		
+		return false;
+	}
+	#endregion
+	
+	#region Speed
 	private void SpeedLimitation()
 	{
 		//calculate speed independend of fall speed
@@ -212,11 +312,19 @@ public class Movement : MonoBehaviour
 	private void SmoothSpeed()
 	{
 		/* speed rules */
+		if (noInput && noInputNoSpeedInAir)
+		{
+			realSpeed = 0;
+			return;
+		}
+		
 		if (!smoothSpeed)
 		{
-			if (changeSpeedInAir)
+			if (lowerSpeedInAir && upperSpeedInAir)
 				realSpeed = desiredSpeed;
-			else if (realGrounded)
+			else if (lowerSpeedInAir && realSpeed > desiredSpeed)
+				realSpeed = desiredSpeed;
+			else if (upperSpeedInAir && realSpeed < desiredSpeed)
 				realSpeed = desiredSpeed;
 			
 			return;
@@ -241,12 +349,37 @@ public class Movement : MonoBehaviour
 		else if (drasticSmoothSpeed)
 			return;
 		
-		//if lower speed
-		if (realSpeed - desiredSpeed > 0)
-			realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
-		//if upper speed
-		else if (realSpeed - desiredSpeed < 0)
-			realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
+		if (!realGrounded)
+		{
+			if (lowerSpeedInAir && upperSpeedInAir)
+			{
+				//if lower speed
+				if (realSpeed > desiredSpeed)
+					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
+				//if upper speed
+				if (realSpeed < desiredSpeed)
+					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
+			}
+			else if (lowerSpeedInAir && realSpeed > desiredSpeed)
+			{
+				//if lower speed
+				realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
+			}
+			else if (upperSpeedInAir && realSpeed < desiredSpeed)
+			{
+				//if upper speed
+				realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
+			}
+		}
+		else
+		{
+			//if lower speed
+			if (realSpeed > desiredSpeed)
+				realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
+			//if upper speed
+			if (realSpeed < desiredSpeed)
+				realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
+		}
 	}
 	private IEnumerator drasticSpeed()
 	{
@@ -255,29 +388,54 @@ public class Movement : MonoBehaviour
 		//while this variables is almost done
 		while (Mathf.Round(realSpeed) != Mathf.Round(desiredSpeed))
 		{
-			if (!changeSpeedInAir && !realGrounded)
-				yield return null;
+			//if in air check if we need to change speed
+			if (!realGrounded)
+			{
+				if (lowerSpeedInAir && upperSpeedInAir)
+				{
+					//if lower speed
+					if (realSpeed > desiredSpeed)
+						realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
+					//if upper speed
+					else if (realSpeed < desiredSpeed)
+						realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
+				}
+				else if (lowerSpeedInAir && realSpeed > desiredSpeed)
+				{
+					//if lower speed
+					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
+				}
+				else if (upperSpeedInAir && realSpeed < desiredSpeed)
+				{
+					//if upper speed
+					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
+				}
+			}
+			//always change speed on ground
+			else
+			{
+				//if lower speed
+				if (realSpeed > desiredSpeed)
+					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
+				//if upper speed
+				else if (realSpeed < desiredSpeed)
+					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
+			}
 			
-			//if lower speed
-			else if (realSpeed - desiredSpeed > 0)
-				realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
-			//if upper speed
-			if (realSpeed - desiredSpeed < 0)
-				realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
 			yield return null;
 		}
 		drasticSpeedRunning = false;
 	}
 	#endregion
 	
-	#region groundCheck
+	#region GroundCheck
 	private void GroundCheck()
 	{
 		//reset variables
 		realGrounded = false;
 		grounded = false;
 		
-		//set graunded if cayoty time
+		//set grounded if cayoty time
 		if (useCayotyTime)
 		{
 			if (cayotyTime > 0)
@@ -326,7 +484,7 @@ public class Movement : MonoBehaviour
 	}
 	#endregion
 	
-	#region utilities
+	#region Utilities
 	//Utilities
 	private float WrapAngle(float angle)
     {
@@ -341,7 +499,7 @@ public class Movement : MonoBehaviour
 	}
 	#endregion
 	
-	#region debugInformation
+	#region DebugInformation
 	void DebugText()
 	{
 		if (!debugText)
@@ -354,7 +512,7 @@ public class Movement : MonoBehaviour
 	}
 	#endregion
 
-	#region gizmos
+	#region Gizmos
 	void OnDrawGizmosSelected()
 	{
 		if (!gizmosSelected)

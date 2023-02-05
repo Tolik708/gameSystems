@@ -55,7 +55,9 @@ public class EnemyStatsEditor : Editor
 		
 		//speeds
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("walkSpeed"));
-		EditorGUILayout.PropertyField(serializedObject.FindProperty("changeSpeedInAir"));
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("lowerSpeedInAir"));
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("upperSpeedInAir"));
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("noInputNoSpeedInAir"));
 		
 		SerializedProperty smoothSpeed = serializedObject.FindProperty("smoothSpeed");
 		EditorGUILayout.PropertyField(smoothSpeed);
@@ -67,6 +69,49 @@ public class EnemyStatsEditor : Editor
 			if (drasticSmoothSpeed.boolValue)
 				EditorGUILayout.PropertyField(serializedObject.FindProperty("drastic"));
 		}
+		
+		EditorGUILayout.Space();
+		EditorGUILayout.HelpBox("Abilities", MessageType.None);
+		
+		//jump
+		SerializedProperty jump = serializedObject.FindProperty("jump");
+		EditorGUILayout.PropertyField(jump);
+		if (jump.boolValue)
+		{
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("holdJumpButton"));
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("jumpHeight"));
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("jumpDelay"));
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("jumpRememberTime"));
+			//duble jump
+			SerializedProperty dubbleJump = serializedObject.FindProperty("dubbleJump");
+			EditorGUILayout.PropertyField(dubbleJump);
+			if (dubbleJump.boolValue)
+			{
+				EditorGUILayout.PropertyField(serializedObject.FindProperty("ammountOfJumpsInAir"));
+				EditorGUILayout.PropertyField(serializedObject.FindProperty("dubbleJumpHeight"));
+				EditorGUILayout.PropertyField(serializedObject.FindProperty("dubbleJumpDelay"));
+			}
+			//jump cut
+			SerializedProperty jumpCut = serializedObject.FindProperty("jumpCut");
+			EditorGUILayout.PropertyField(jumpCut);
+			if (jumpCut.boolValue)
+				EditorGUILayout.PropertyField(serializedObject.FindProperty("jumpCutStrength"));
+			//jump speed
+			SerializedProperty jumpSpeedManipulations = serializedObject.FindProperty("jumpSpeedManipulations");
+			EditorGUILayout.PropertyField(jumpSpeedManipulations);
+			if (jumpSpeedManipulations.boolValue)
+			{
+				EditorGUILayout.PropertyField(serializedObject.FindProperty("increaseSpeedAfterJumpBy"));
+				EditorGUILayout.PropertyField(serializedObject.FindProperty("maxObtainableSpeedByJump"));
+			}
+		}
+		
+		//input
+		if (jump.boolValue)
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("jumpKey"));
+		
+		EditorGUILayout.Space();
+		EditorGUILayout.HelpBox("Debug", MessageType.None);
 		
 		//Gizmos
 		SerializedProperty gizmosA = serializedObject.FindProperty("gizmosAllways");
