@@ -21,14 +21,20 @@ public class Movement : MonoBehaviour
 	[SerializeField] private float     cayotyTime =    0.4f;
 	
 	[Header("Speeds")]
-	[SerializeField] private float   walkSpeed =           5;
-	[SerializeField] private bool    lowerSpeedInAir =     false;
-	[SerializeField] private bool    upperSpeedInAir =     true;
-	[SerializeField] private bool    noInputNoSpeedInAir = true;
-	[SerializeField] private bool    smoothSpeed =         false;
-	[SerializeField] private Vector2 smoothSpeedSpeed =    new Vector2(10, 10); // lowering / upering
-	[SerializeField] private bool    drasticSmoothSpeed =  false;
-	[SerializeField] private Vector2 drastic =             new Vector2(10, 10); // lowering / upering
+	[SerializeField] private float   walkSpeed = 5;
+	[SerializeField] private bool    lowerSpeedInAir = false;
+	[SerializeField] private bool    upperSpeedInAir = true;
+	[SerializeField] private bool    noInputNoSpeedGround = false;
+	[SerializeField] private bool    noInputNoSpeedAir = true;
+	[SerializeField] private bool    smoothSpeed = false;
+	[SerializeField] private Vector2 smoothSpeedAccelerationGround = new Vector2(10, 10); // lowering / upering
+	[SerializeField] private Vector2 smoothSpeedAccelerationAir = new Vector2(10, 10); // lowering / upering
+	[SerializeField] private bool    drasticSmoothSpeed = false;
+	[SerializeField] private Vector2 drastic = new Vector2(10, 10); // lowering / upering
+	
+	[Header("Gravitation")]
+	[SerializeField] private float normalGravitation =  9.81f;
+	[SerializeField] private float fallingGravitation = 9.81f;
 	
 	[Header("Jump")]
 	[SerializeField] private bool  jump;
@@ -88,8 +94,13 @@ public class Movement : MonoBehaviour
 	private bool  grounded;
 	private float cayotyTimer;
 	//speed
+	Vector3 moveDirection;
 	private float realSpeed;
 	private float desiredSpeed;
+	private float lastDesiredSpeed;
+	private float lastLastDesiredSpeed;
+	private float deltaSpeedCounter;
+	private float deltaSpeedCounterSpeed;
 	//jump
 	private int   jumpAmm;
 	private float jumpRememberTimer;
@@ -102,6 +113,9 @@ public class Movement : MonoBehaviour
 	private TextMeshProUGUI stateText;
 	//bools to control state
 	private bool noInput;
+	//Gravity changing
+	private Vector3 currUp;
+	private float gravitation;
 	
 	private void Start()
 	{
@@ -113,11 +127,16 @@ public class Movement : MonoBehaviour
 		//get renderer for later use
 		Renderer rend = objectWithModel.transform.GetComponent<Renderer>();
 		
+		//set start up direction
+		currUp = transform.up;
+		
 		//Rigidbody
 		if (rb == null && gameObject.GetComponent<Rigidbody>() == null)
 			rb = gameObject.AddComponent<Rigidbody>();
 		else if (rb == null)
 			rb = gameObject.GetComponent<Rigidbody>();
+		//disabeling gravity because we are handeling it by ourselfs
+		rb.useGravity = false;
 		
 		//Camera
 		if (cameraHolder == null)
@@ -166,6 +185,7 @@ public class Movement : MonoBehaviour
 		otherUpdate();
 		CameraUpdate();
 		GroundCheck();
+		GravitationUpdate();
 		MyInput();
 		StateHandler();
 		SpeedLimitation();
@@ -176,6 +196,12 @@ public class Movement : MonoBehaviour
 	private void FixedUpdate()
 	{
 		Move();
+		
+		//apply gravity. If jumping for first 0.1 s use normalGravitation
+		if (jumpedTimer > 0)
+			rb.AddForce(-currUp * -normalGravitation, ForceMode.Acceleration);
+		else
+			rb.AddForce(-currUp * -gravitation, ForceMode.Acceleration);
 	}
 	
 	private void otherUpdate()
@@ -200,18 +226,22 @@ public class Movement : MonoBehaviour
 	
 	private void StateHandler()
 	{
-		if (!noInput && realGrounded)
+		if (!noInput && realGrounded) //walk
 		{
 			moveType = movementTypes.walking;
 			desiredSpeed = walkSpeed;
 		}
-		else if (noInput && realGrounded)
+		else if (noInput && realGrounded) //stand
 		{
 			moveType = movementTypes.stand;
-			desiredSpeed = walkSpeed;
+			desiredSpeed = 0;
 		}
-		else
+		else //air
 		{
+			if (noInput)
+				desiredSpeed = 0;
+			else if (desiredSpeed == 0)
+				desiredSpeed = walkSpeed;
 			moveType = movementTypes.air;
 		}
 	}
@@ -233,12 +263,13 @@ public class Movement : MonoBehaviour
 	
 	private void Move()
 	{
-		//get move direction (if !movePlayerIfRealSpeedNotNull)
-		Vector3 moveDirection = orientation.forward * Input.GetAxisRaw("Vertical") + orientation.right * Input.GetAxisRaw("Horizontal");
+		//get move direction
+		if (Input.GetAxisRaw("Vertical") != 0 || Input.GetAxisRaw("Horizontal") != 0)
+			moveDirection = orientation.forward * Input.GetAxisRaw("Vertical") + orientation.right * Input.GetAxisRaw("Horizontal");
 		
-		/*apply move direction (multiplicator 100 can be changed to any big number.
+		/*apply move direction (multiplicator 10 can be changed to any big number.
 		It is here because we handle speed by limiting it in SpeedLimitation())*/
-		rb.AddForce(moveDirection.normalized * realSpeed * 10, ForceMode.Force);
+		rb.AddForce(realSpeed * 10 * moveDirection.normalized, ForceMode.Force);
 	}
 	
 	#region Jump
@@ -257,12 +288,11 @@ public class Movement : MonoBehaviour
 			//jumpedTimer works only after that frame so we need to set drag to 0 in that frame too
 			rb.drag = 0;
 			
-			//reset y velocity if it lower 0 for jump be independend of y velocity (because can be grounded earlier than velocity.y is 0)
-			if (rb.velocity.y < 0)
-				rb.velocity = new Vector3(rb.velocity.x, 0, rb.velocity.z);
-			//adding 0.2 for sure that we get to needed height (can be changed)
-			//calculating impulse independent of mass to get to needed height
-			rb.AddForce(Vector3.up * (Mathf.Sqrt((-2 * -9.81f) * jumpHeight) + 0.2f), ForceMode.VelocityChange);
+			AddJumpVelocity(jumpHeight);
+			
+			//speed manipulations
+			//if desiredSpeed 9.7, maxObtainableSpeedByJump is 10 and increaseSpeedAfterJumpBy is 0.5 it would add 0.3
+			desiredSpeed += Mathf.Clamp(maxObtainableSpeedByJump - desiredSpeed, 0, increaseSpeedAfterJumpBy);
 			
 			return true;
 		}
@@ -278,18 +308,39 @@ public class Movement : MonoBehaviour
 			//jumpedTimer works only after that frame so we need to set drag to 0 in that frame too
 			rb.drag = 0;
 			
-			//reset y velocity if it lower 0 for jump be independend of y velocity (because can be grounded earlier than velocity.y is 0)
-			if (rb.velocity.y < 0)
-				rb.velocity = new Vector3(rb.velocity.x, 0, rb.velocity.z);
-			//calculating impulse independent of mass to get to needed height
-			rb.AddForce(Vector3.up * Mathf.Sqrt((-2 * -9.81f) * dubbleJumpHeight), ForceMode.VelocityChange);
+			AddJumpVelocity(dubbleJumpHeight);
+			
+			return true;
 		}
 		
-		//if caused by remember do not add remember time
+		//if called by remember do not add remember time
 		else if (!byRemember)
 			jumpRememberTimer = jumpRememberTime;
 		
 		return false;
+	}
+	
+	void AddJumpVelocity(float addJumpHeight)
+	{
+		//we are using mormalGravitation instead of gravitation because after jump velocity is always positive
+		float desiredJumpHeight = addJumpHeight;
+		//calculating height we need to add from that point to desired point by calculating jump height from velocity that we currently have
+		if (rb.velocity.y > 0) //if we are falling we do not want to decrees our jumpImpulse
+			desiredJumpHeight += ((rb.velocity.y * rb.velocity.y) / -normalGravitation) / 2; //jumpHeight = (Vtakeoff² / -gravitation) / 2
+		//reseting velocity by y because we included current velocity in desiredJumpHeight
+		rb.velocity = new Vector3(rb.velocity.x, 0, rb.velocity.z);
+		//calculating takeoff velocity independent of mass to get to desired height
+		rb.AddForce(Vector3.up * Mathf.Sqrt((-2 * normalGravitation) * desiredJumpHeight), ForceMode.VelocityChange);
+	}
+	#endregion
+	
+	#region gravitation
+	void GravitationUpdate()
+	{
+		if (rb.velocity.y < 0)
+			gravitation = fallingGravitation;
+		else
+			gravitation = normalGravitation;
 	}
 	#endregion
 	
@@ -312,7 +363,12 @@ public class Movement : MonoBehaviour
 	private void SmoothSpeed()
 	{
 		/* speed rules */
-		if (noInput && noInputNoSpeedInAir)
+		if (noInput && noInputNoSpeedGround && realGrounded)
+		{
+			realSpeed = 0;
+			return;
+		}
+		else if (noInput && noInputNoSpeedAir && !realGrounded)
 		{
 			realSpeed = 0;
 			return;
@@ -330,13 +386,11 @@ public class Movement : MonoBehaviour
 			return;
 		}
 		
-		//if smoothSpeed
-		//if difference between desired and real drastic enough                                            lowering    upering
-		if (drasticSmoothSpeed && Mathf.Abs(realSpeed - desiredSpeed) > ((realSpeed - desiredSpeed) >= 0 ? drastic.x : drastic.y))
+		
+		//if difference between desired and real, drastic enough                                            lowering    upering      if not started smooth getting to desired speed start it
+		if (drasticSmoothSpeed && Mathf.Abs(realSpeed - desiredSpeed) > ((realSpeed - desiredSpeed) >= 0 ? drastic.x : drastic.y) && !drasticSpeedRunning)
 		{
-			//if not started smooth getting to desired speed start it
-			if (drasticSpeedRunning == false)
-				StartCoroutine(drasticSpeed());
+			StartCoroutine(drasticSpeed());
 			return;
 		}
 		//if difference not big enough to start smooth getting to desired speed and it not active set speed to desired
@@ -349,78 +403,82 @@ public class Movement : MonoBehaviour
 		else if (drasticSmoothSpeed)
 			return;
 		
-		if (!realGrounded)
+		//if smoothSpeed and !drasticSmoothSpeed
+		if (lastDesiredSpeed != desiredSpeed)
 		{
-			if (lowerSpeedInAir && upperSpeedInAir)
-			{
-				//if lower speed
-				if (realSpeed > desiredSpeed)
-					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
-				//if upper speed
-				if (realSpeed < desiredSpeed)
-					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
-			}
-			else if (lowerSpeedInAir && realSpeed > desiredSpeed)
-			{
-				//if lower speed
-				realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
-			}
-			else if (upperSpeedInAir && realSpeed < desiredSpeed)
-			{
-				//if upper speed
-				realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
-			}
+			lastLastDesiredSpeed = realSpeed;
+			//calculating speed for deltaSpeedCounter by proportion (desiredSpeed - lastDesiredSpeed)/1 = (desiredSpeed - realSpeed)/x
+			deltaSpeedCounterSpeed = 2 - ((desiredSpeed - realSpeed) / (desiredSpeed - lastDesiredSpeed));
+			deltaSpeedCounter = 0;
 		}
-		else
+		lastDesiredSpeed = desiredSpeed;
+		
+		//if smoothspeed and !drasticSmoothSpeed
+		//choose what variable we should use for speed changing
+		float smoothWay = realGrounded ? (realSpeed < desiredSpeed ? smoothSpeedAccelerationGround.x : smoothSpeedAccelerationGround.y) : (realSpeed < desiredSpeed ? smoothSpeedAccelerationAir.x : smoothSpeedAccelerationAir.y);
+		
+		//increase deltaSpeedCounter by smothWay and multiplay by deltaSpeedCounterSpeed because we want to count what player speed was when he changes desiredSpeed
+		deltaSpeedCounter += Mathf.Clamp(1 - deltaSpeedCounter, 0, (Time.deltaTime * smoothWay) * deltaSpeedCounterSpeed);
+		
+		if (!realGrounded) //if in air
 		{
 			//if lower speed
-			if (realSpeed > desiredSpeed)
-				realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
+			if (lowerSpeedInAir && realSpeed > desiredSpeed)
+			{
+				realSpeed = Mathf.Lerp(lastLastDesiredSpeed, desiredSpeed, deltaSpeedCounter);
+			}
 			//if upper speed
-			if (realSpeed < desiredSpeed)
-				realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
+			else if (upperSpeedInAir && realSpeed < desiredSpeed)
+			{
+				realSpeed = Mathf.Lerp(lastLastDesiredSpeed, desiredSpeed, deltaSpeedCounter);
+			}
 		}
+		else //if grounded
+			realSpeed = Mathf.Lerp(lastLastDesiredSpeed, desiredSpeed, deltaSpeedCounter);
 	}
 	private IEnumerator drasticSpeed()
 	{
+		//for keeping track of how many times speed changed 
+		bool once = true;
 		//set this variable to know if this coroutine is still running
 		drasticSpeedRunning = true;
 		//while this variables is almost done
 		while (Mathf.Round(realSpeed) != Mathf.Round(desiredSpeed))
 		{
-			//if in air check if we need to change speed
-			if (!realGrounded)
+			if (lastDesiredSpeed != desiredSpeed)
 			{
-				if (lowerSpeedInAir && upperSpeedInAir)
-				{
-					//if lower speed
-					if (realSpeed > desiredSpeed)
-						realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
-					//if upper speed
-					else if (realSpeed < desiredSpeed)
-						realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
-				}
-				else if (lowerSpeedInAir && realSpeed > desiredSpeed)
-				{
-					//if lower speed
-					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
-				}
-				else if (upperSpeedInAir && realSpeed < desiredSpeed)
-				{
-					//if upper speed
-					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
-				}
+				lastLastDesiredSpeed = realSpeed;
+				//calculating speed for deltaSpeedCounter by proportion (desiredSpeed - lastDesiredSpeed)/1 = (desiredSpeed - realSpeed)/x
+				deltaSpeedCounterSpeed = 2 - ((desiredSpeed - realSpeed) / (desiredSpeed - lastDesiredSpeed));
+				deltaSpeedCounter = 0;
+				
+				if (!once)
+					break;
+				once = false;
 			}
-			//always change speed on ground
-			else
+			lastDesiredSpeed = desiredSpeed;
+			
+			//choose what variable we should use for speed changing
+			float smoothWay = realGrounded ? (realSpeed < desiredSpeed ? smoothSpeedAccelerationGround.x : smoothSpeedAccelerationGround.y) : (realSpeed < desiredSpeed ? smoothSpeedAccelerationAir.x : smoothSpeedAccelerationAir.y);
+											
+			//increase deltaSpeedCounter by smothWay and multiplay by deltaSpeedCounterSpeed because we want to count what player speed was when he changes desiredSpeed
+			deltaSpeedCounter += Mathf.Clamp(1 - deltaSpeedCounter, 0, (Time.deltaTime * smoothWay) * deltaSpeedCounterSpeed);
+			
+			if (!realGrounded) //if in air
 			{
 				//if lower speed
-				if (realSpeed > desiredSpeed)
-					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.x);
+				if (lowerSpeedInAir && realSpeed > desiredSpeed)
+				{
+					realSpeed = Mathf.Lerp(lastLastDesiredSpeed, desiredSpeed, deltaSpeedCounter);
+				}
 				//if upper speed
-				else if (realSpeed < desiredSpeed)
-					realSpeed = Mathf.Lerp(realSpeed, desiredSpeed, Time.deltaTime * smoothSpeedSpeed.y);
+				else if (upperSpeedInAir && realSpeed < desiredSpeed)
+				{
+					realSpeed = Mathf.Lerp(lastLastDesiredSpeed, desiredSpeed, deltaSpeedCounter);
+				}
 			}
+			else //if grounded
+				realSpeed = Mathf.Lerp(lastLastDesiredSpeed, desiredSpeed, deltaSpeedCounter);
 			
 			yield return null;
 		}

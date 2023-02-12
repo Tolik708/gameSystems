@@ -57,18 +57,24 @@ public class EnemyStatsEditor : Editor
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("walkSpeed"));
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("lowerSpeedInAir"));
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("upperSpeedInAir"));
-		EditorGUILayout.PropertyField(serializedObject.FindProperty("noInputNoSpeedInAir"));
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("noInputNoSpeedGround"));
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("noInputNoSpeedAir"));
 		
 		SerializedProperty smoothSpeed = serializedObject.FindProperty("smoothSpeed");
 		EditorGUILayout.PropertyField(smoothSpeed);
 		if (smoothSpeed.boolValue)
 		{
-			EditorGUILayout.PropertyField(serializedObject.FindProperty("smoothSpeedSpeed"));
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("smoothSpeedAccelerationGround"));
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("smoothSpeedAccelerationAir"));
 			SerializedProperty drasticSmoothSpeed = serializedObject.FindProperty("drasticSmoothSpeed");
 			EditorGUILayout.PropertyField(drasticSmoothSpeed);
 			if (drasticSmoothSpeed.boolValue)
 				EditorGUILayout.PropertyField(serializedObject.FindProperty("drastic"));
 		}
+		
+		//gravity
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("normalGravitation"));
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("fallingGravitation"));
 		
 		EditorGUILayout.Space();
 		EditorGUILayout.HelpBox("Abilities", MessageType.None);
