@@ -8,7 +8,7 @@ public class EnemyStatsEditor : Editor
     {
         FirstPerson, _2D, ThirdPerson
     }
-
+	
     // The enum field that will determine what variables to display in the Inspector
     public DisplayCategory categoryToDisplay;
 
@@ -36,13 +36,14 @@ public class EnemyStatsEditor : Editor
     void DisplayFirstPersonInfo()
     {
 		/*show allways wariables*/
-		
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("gravitationDir"));
 		//general
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("objectWithModel"));
 		
 		//camera
         EditorGUILayout.PropertyField(serializedObject.FindProperty("cameraPosition"));
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("sensativity"));
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("maxLookAngle"));
 		
 		//groundCheck
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("groundLayer"));
@@ -60,6 +61,14 @@ public class EnemyStatsEditor : Editor
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("noInputNoSpeedGround"));
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("noInputNoSpeedAir"));
 		
+		SerializedProperty instantMoveDirChange = serializedObject.FindProperty("instantMoveDirChange");
+		EditorGUILayout.PropertyField(instantMoveDirChange);
+		if (!instantMoveDirChange.boolValue)
+		{
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("instantMoveDirChangeAir"));
+			EditorGUILayout.PropertyField(serializedObject.FindProperty("dirChangeStrength"));
+		}
+		
 		SerializedProperty smoothSpeed = serializedObject.FindProperty("smoothSpeed");
 		EditorGUILayout.PropertyField(smoothSpeed);
 		if (smoothSpeed.boolValue)
@@ -75,6 +84,8 @@ public class EnemyStatsEditor : Editor
 		//gravity
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("normalGravitation"));
 		EditorGUILayout.PropertyField(serializedObject.FindProperty("fallingGravitation"));
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("startGravitationDir"));
+		EditorGUILayout.PropertyField(serializedObject.FindProperty("playerRotationTime"));
 		
 		EditorGUILayout.Space();
 		EditorGUILayout.HelpBox("Abilities", MessageType.None);
